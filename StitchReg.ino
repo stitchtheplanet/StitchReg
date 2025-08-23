@@ -79,7 +79,8 @@ void loop() {
   }
 
   float dots = sqrt(sq(abs(x)) + sq(abs(y)));
-  float pot = calculate_pot(dots);
+  // float pot = calculate_pot(dots);
+  float pot = calculate_log(dots);
   
   pot_settings[readIndex] = pot;
   dot_readings[readIndex] = dots;
@@ -129,5 +130,12 @@ float calculate_pot(float dots) {
   float percentage = stitches_needed / STITCHES_MAX;
   // pot range 100 - 127, which is really 0 - 27 + 100
   // TODO this is too linear, we need to ramp up quickly and ramp down slowly
+
   return (percentage * 27) + 100.0;
+}
+
+float calculate_log(float dots) {
+  // Ramp up and down instead of linear, seems smoother.
+  // 40 works when the machine is limited to ~50%, but I'd rather have the machine at 100%.
+  return 100.0 + (27 * ((log(dots + 1) / log(40))));
 }
