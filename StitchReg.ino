@@ -36,8 +36,6 @@ MCP4131 Potentiometer(CHIP_SELECT);
 void setup() {
   Serial.begin(9600);
 
-  Serial.println("Starting");
-
   pinMode(RELAY, OUTPUT);
   digitalWrite(RELAY, LOW);
 
@@ -64,10 +62,8 @@ void loop() {
   if (mouse.clicked(2)) {
     Serial.println("MOUSE WAS CLICKED");
     if (!running) {
-      Serial.println("Turning on");
       digitalWrite(RELAY, HIGH);
     } else {
-      Serial.println("Turning off");
       digitalWrite(RELAY, LOW);
     }
     running = !running;
@@ -100,13 +96,11 @@ void loop() {
   float pot_avg = pot_total / NUM_READINGS;
   
   if (dot_avg > 0.0) {
-    // We're moving
     if (pot > 127.0) {
      tone(BUZZER, 523, 250);
       Serial.println("OVER SPEED");
     }
     pot = constrain(pot, 105, 127);
-    Serial.println(pot);
     Potentiometer.writeWiper(pot);
   } else {
     Serial.println(WIPER_IDLE);
