@@ -16,13 +16,14 @@
 #define MOUSE_CLOCK 6
 #define CHIP_SELECT 10
 #define BUZZER 8
+#define SWITCH 9
 
-#define WIPER_IDLE 100
+#define WIPER_IDLE 110
 #define SENSOR_DPI 1600.0
 #define STITCHES_MAX 25.0 // 1500 stitches/min = 25 stitches/sec
 
 
-const int NUM_READINGS = 3;
+const int NUM_READINGS = 5;
 float pot_settings[NUM_READINGS];
 float dot_readings[NUM_READINGS];
 
@@ -38,6 +39,8 @@ void setup() {
 
   pinMode(RELAY, OUTPUT);
   digitalWrite(RELAY, LOW);
+
+  pinMode(SWITCH, INPUT);
 
   if (mouse.initialise() != 0) {
     Serial.println("mouse error");
@@ -55,24 +58,17 @@ void setup() {
 }
 
 void loop() {
-  mouse.get_data();
-  int x = mouse.x_movement();
-  int y = mouse.y_movement();
-
-  if (mouse.clicked(2)) {
-    Serial.println("MOUSE WAS CLICKED");
-    if (!running) {
-      digitalWrite(RELAY, HIGH);
-    } else {
-      digitalWrite(RELAY, LOW);
-    }
-    running = !running;
-  }
-
-  if (!running) {
+  if (digitalRead(SWITCH) == 0) {
+    digitalWrite(RELAY, LOW);
     delay(10);
     return;
   }
+  
+  digitalWrite(RELAY, HIGH);
+
+  mouse.get_data();
+  int x = mouse.x_movement();
+  int y = mouse.y_movement();
 
   float dots = sqrt(sq(abs(x)) + sq(abs(y)));
   // float pot = calculate_pot(dots);
@@ -100,10 +96,11 @@ void loop() {
      tone(BUZZER, 523, 250);
       Serial.println("OVER SPEED");
     }
-    pot = constrain(pot, 105, 127);
+    // pot = constrain(pot, WIPER_IDLE, 127);
+    pot = bucket(pot);
+    Serial.println(pot);
     Potentiometer.writeWiper(pot);
   } else {
-    Serial.println(WIPER_IDLE);
     Potentiometer.writeWiper(WIPER_IDLE);
   }
 
@@ -132,4 +129,22 @@ float calculate_log(float dots) {
   // Ramp up and down instead of linear, seems smoother.
   // 40 works when the machine is limited to ~50%, but I'd rather have the machine at 100%.
   return 100.0 + (27 * ((log(dots + 1) / log(40))));
+}
+
+float bucket(float speed) {
+  // Put the speed into one of 4 buckets so it's not shifting all over the place
+  // This seems to make it smoother, but is maybe less adjustable?
+  float bucket_width = (127 - WIPER_IDLE) / 5;
+  int multiplier;
+
+  if (speed < (WIPER_IDLE + bucket_width)) {
+    multiplier = 1;
+  } else if (speed < (WIPER_IDLE + (bucket_width * 2))) {
+    multiplier = 2;
+  } else if (speed < (WIPER_IDLE + (bucket_width * 3))) {
+    multiplier = 3;
+  } else {
+    multiplier = 4;
+  }
+  return WIPER_IDLE + (bucket_width * multiplier);
 }
