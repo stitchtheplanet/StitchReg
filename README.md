@@ -22,12 +22,36 @@ A: It would help, but no. At least I hope not, if I write the instructions well 
 ### Q: Will you build and sell me one of these?
 A: Not at this point, it's still under development and subject to change a lot.
 
-## BOM
-
-## Schematic
-
-![Schematic](https://github.com/user-attachments/assets/296f13f5-c883-4133-b986-caafcdf1954d)
 
 ## How It Works
 
+StitchReg works by using the optical sensor from a mouse to calculate the speed of the machine/fabric and control the speed of the machine by acting as the foot pedal with a digital potentiometer.
+
+The Juki foot pedal is basically a resistor and there are 3 states we need to care about:
+
+- **idle** - when the foot pedal is not depressed forward or backward it sits around 140k ohms
+- **thread cutter** - to trigger the thread cutter the pedal drops to around 44k ohms
+- **sewing** - sewing happens, slow to fast, from around 20k ohms to around 500 ohms
+
 ## Building One For Yourself
+
+### What You Need
+
+Currently this is just breadboarded with an Arduino Uno Rev 3. Once the design is final I'll create a PCB and enclosure.
+
+- [PS/2 Optical Mouse](https://www.amazon.com/dp/B0DH58555P)
+- [Arduino kit](https://www.amazon.com/dp/B01D8KOZF4)
+- [MCP4131-104E/P](https://www.mouser.com/ProductDetail/Microchip-Technology/MCP4131-103E-P)
+- [Momentary switch](https://www.amazon.com/dp/B0BR41KCDP)
+
+The parts below are in the linked arduino kit, but I'll find better options.
+
+- Relay (in the above arduino kit)
+- 10k ohm resistor (2) (in the above arduino kit)
+- 100k ohm resistor (in the above arduino kit)
+- Buzzer (in the above arduino kit)
+- Barrel Jack (cut the one off the battery connector in the arduino kit)
+
+### Schematic
+
+![Schematic](https://github.com/user-attachments/assets/296f13f5-c883-4133-b986-caafcdf1954d)
