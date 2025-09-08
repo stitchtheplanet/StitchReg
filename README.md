@@ -26,7 +26,7 @@ A: Not at this point, it's still under development and subject to change a lot.
 
 ## Schematic
 
-![Schematic](https://github.com/user-attachments/assets/01a542aa-ec06-4117-8df7-0205080eca5d)
+![Schematic](https://github.com/user-attachments/assets/296f13f5-c883-4133-b986-caafcdf1954d)
 
 ## How It Works
 
