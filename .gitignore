@@ -2,3 +2,8 @@
 *-bak
 *-backups
 *.FCBak
+*.lck
+*#auto_saved_files#
+Schematics/**/*.png
+Schematics/**/*.svg
+*fp-info-cache
