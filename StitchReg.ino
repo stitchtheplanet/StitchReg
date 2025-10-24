@@ -1,150 +1,355 @@
 #include <MCP4131.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
 #include "PS2MouseHandler.h"
+#include "state.h"
+#include "button.h"
+#include "encoder.h"
 
-// Desired features:
-// Stitch length mode
-// Speed mode
-// Cut Thread button
-// Start/Stop button
-// Overspeed indicator
-// Edge warning (might need a pi/storage for this kind of thing?)
-// Idle speed (5% to 100%)
-// Measurement (need a display)
+// Juki TL Pedal resistances
+// Without pressing the pedal it sits at 140k ohms and the machine needs to see
+// this resistance first before it will work. In the stop position we set the
+// digital pot to 30k and put 110k of resistance in series, giving us the 40k.
+// When running, we apply a voltage to the transistor which bypasses the 110k
+// of resistors. Then we can set the pot according to our needs. We need to take
+// care when turning the transistor off that we don't inadvertently land in the
+// 30k - 40k zone or the thread cutter will trigger.
+//
+// Speeds adjust from ~20k (slow) down to 0 ohms (fastest)
+//
+// State      Transistor    Chip    R
+// Off        LOW           89      ~140k
+// Cut        HIGH          76      ~40k
+// Idle       HIGH          89      ~30k
+// Slow       HIGH          102     ~20k
+// Fastest    HIGH          128     ~0
 
-#define RELAY 2
-#define MOUSE_DATA 5
-#define MOUSE_CLOCK 6
-#define CHIP_SELECT 10
-#define BUZZER 8
-#define SWITCH 9
+// The encoder must be on pins 2 and 3 because it uses interrupts
+#define ENC_CLK 2
+#define ENC_DT 3
 
-#define WIPER_IDLE 110
+#define MOUSE_CLK 6
+#define MOUSE_DATA 7
+
+#define BTN_RUN 8
+#define BTN_CUT 9
+#define BTN_ENC 12
+
+#define POT_CS 10
+#define IDLE_CTRL 14
+
+#define WIPER_IDLE 89
+#define THREAD_CUT 76
 #define SENSOR_DPI 1600.0
 #define STITCHES_MAX 25.0 // 1500 stitches/min = 25 stitches/sec
 
+#define DEBOUNCE 5
 
-const int NUM_READINGS = 5;
-float pot_settings[NUM_READINGS];
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET 4
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+MCP4131 Potentiometer(POT_CS);
+PS2MouseHandler mouse(MOUSE_CLK, MOUSE_DATA, PS2_MOUSE_REMOTE);
+
+Button *runButton = button_new(BTN_RUN);
+Button *encButton = button_new(BTN_ENC);
+Button *cutButton = button_new(BTN_CUT);
+
+Encoder *encoder = encoder_new(ENC_CLK, ENC_DT);
+
+const int cw = SSD1306_WHITE;
+const int cb = SSD1306_BLACK;
+
+const int NUM_READINGS = 25;
 float dot_readings[NUM_READINGS];
-
 int readIndex = 0;
 
-bool running = false;
-
-PS2MouseHandler mouse(MOUSE_CLOCK, MOUSE_DATA, PS2_MOUSE_REMOTE);
-MCP4131 Potentiometer(CHIP_SELECT);
+State *state = state_new();
 
 void setup() {
   Serial.begin(9600);
+  
+  // initialize the display
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.setTextSize(2);
+  display.setTextColor(cw);
+  setDisplay();
 
-  pinMode(RELAY, OUTPUT);
-  digitalWrite(RELAY, LOW);
+  // The transistor that engages the idle resistor
+  pinMode(IDLE_CTRL, OUTPUT);
+  digitalWrite(IDLE_CTRL, LOW);
 
-  pinMode(SWITCH, INPUT);
-
-  if (mouse.initialise() != 0) {
-    Serial.println("mouse error");
-  }
-
+  // Initialize the potentiometer to 40k
+  Potentiometer.writeWiper(WIPER_IDLE);
+ 
+  int m = mouse.initialise();
   mouse.enable_data_reporting();
   mouse.set_remote_mode();
 
-  for (int i = 0; i < NUM_READINGS; i++) {
-    pot_settings[i] = 0;
-  }
-
-  // initialize this to 40k
-  Potentiometer.writeWiper(WIPER_IDLE);
+  // set up the encoder
+  attachInterrupt(digitalPinToInterrupt(encoder->clk_pin), updateEncoder, CHANGE);
+  setDisplay();
 }
 
 void loop() {
-  if (digitalRead(SWITCH) == 0) {
-    digitalWrite(RELAY, LOW);
+  button_update(encButton);
+  button_update(runButton);
+  button_update(cutButton);
+  
+  if (state->running && runButton->pressed) {
+    stop();
+    setDisplay();
+    return;
+  }
+
+  // manual and baste modes are constant speeds, no need to recalculate
+  if (state->running && ((state->mode == MANUAL) || (state->mode == BASTE))) {
+    return;
+  }
+
+  if (state->running) {
+    // Stitch Per Inch based calculations
+    // Calculate how many dots we've moved since the last poll
+    // Get millis since last poll
+    // That gives us a movement in inches
+    // Figure out if we're idle and set to idle speed or off
+    // Figure out the speed value for the target stitches per inch
+    // if (lastPoll > 100) {
+      // Poll rate of 10ms
+      mouse.get_data();
+      int x = mouse.x_movement();
+      int y = mouse.y_movement();
+      float dots = (sqrt(sq(abs(x)) + sq(abs(y))) * 100.0) / SENSOR_DPI;
+      // float dotsMoved = sqrt(sq(abs(x)) + sq(abs(y)));
+      dot_readings[readIndex] = dots;
+      readIndex = (readIndex + 1) % NUM_READINGS;
+      
+      float dot_total = 0.0;
+      for (int i = 0; i < NUM_READINGS; i++) {
+        dot_total += dot_readings[i];
+      }
+      float dot_avg = dot_total / NUM_READINGS;
+      float percent = ((current_speed(state) * dot_avg) / 25.0);
+      if (percent > 1.0)
+        percent = 1.0;
+
+      if (dots > 0.0) {
+        float pot = (percent * 23) + 105.0;
+        // lastPoll = 0;
+
+        if (state->mode == PRECISE) {
+          digitalWrite(IDLE_CTRL, HIGH);
+        }
+
+        Potentiometer.writeWiper(pot);
+      } else {
+        Potentiometer.writeWiper((state->cruise_idle / 100.0) * 23.0 + 105);
+        if (state->mode == PRECISE) {
+          Potentiometer.writeWiper(WIPER_IDLE);
+          digitalWrite(IDLE_CTRL, LOW);
+        }
+      }
+    // }
+
     delay(10);
+
+    return;
+  }  
+
+  if (runButton->pressed) {
+    start(WIPER_IDLE);
+    // Constant speeds only need to be turned on once so do that here 
+    // rather than writing to the pot every loop.
+    switch (state->mode) {
+      case MANUAL:
+        Potentiometer.writeWiper((state->manual_speed / 100.0) * 23.0 + 105);
+        break;
+      case BASTE:
+        Potentiometer.writeWiper(state_baste_wiper(state));
+        break;
+      default:
+        break;
+    }
+    setDisplay();
+    return;
+  }
+
+  // Check for thread cutter
+  if (cutButton->pressed) {
+    start(THREAD_CUT);
+    delay(5);
+    stop();
+  }
+
+dbuttons:
+  if (encButton->pressed) {
+    state_toggle_selected(state);
+    setDisplay();
+  }
+
+  if (state->dirty) {
+    state->dirty = 0;
+    setDisplay();
+  }
+}
+
+void setDisplay() {
+  // Row 0, mode row
+  display.clearDisplay();
+
+  display.drawCircle(116, 11, 4, cw);
+  if (state->running)
+    display.fillCircle(116, 11, 4, cw);
+
+  display.setCursor(3, 3);
+  display.print(state_mode(state));
+  if (state->dsp_row == 0) {
+    if (state->dsp_selected) {
+      display.drawRect(0, 0, mode_box_width(state->mode), 20, cw);
+    } 
+
+    display.drawFastVLine(0, 0, 20, cw);
+  } 
+
+  // Row 1
+  //   Manual mode - manual speed, 1 row
+  //   Cruise mode - cruise speed, cruise idle, 2 rows
+  //   Precise mode - precise speed, 1 row
+  //   Baste mode - baste speed, 1 row
+  int rw = 60;
+  display.setCursor(3, 25);
+  switch (state->mode) {
+    case MANUAL:
+      display.print(state->manual_speed);
+      display.print("%");
+      if (state->manual_speed < 10)
+        rw = 28;
+      else if (state->manual_speed == 100)
+        rw = 52;
+      else
+        rw = 40;
+      break;
+    case CRUISE:
+      display.print(state->cruise_speed);
+      display.print(" SPI");
+      if (state->cruise_speed < 10)
+        rw = 64;
+      else
+        rw = 76;
+      break;
+    case PRECISE:
+      display.print(state->precise_speed);
+      display.print(" SPI");
+      if (state->precise_speed < 10)
+        rw = 64;
+      else
+        rw = 76;
+      break;
+    case BASTE:
+      display.print(state_baste(state));
+      if (state->baste_speed == MEDIUM)
+        rw = 76;
+      else
+        rw = 65;
+      break;
+  }
+  if (state->dsp_row == 1) {
+    if (state->dsp_selected) {
+      display.drawRect(0, 22, rw, 20, cw);
+    }
+    display.drawFastVLine(0, 22, 20, cw);
+  }
+
+  // Row 2
+  if (state->mode == CRUISE) {
+    display.setCursor(3, 47);
+    display.print(state->cruise_idle);
+    display.print("% IDLE");
+    if (state->cruise_idle < 10)
+      rw = 88;
+    else
+      rw = 100;
+    if (state->dsp_row == 2) {
+      if (state->dsp_selected) {
+        display.drawRect(0, 44, rw, 20, cw);
+      }
+      display.drawFastVLine(0, 44, 20, cw);
+    }
+  }
+
+  display.display();
+}
+
+void updateEncoder() {
+  EncDirection d = encoder_update(encoder);
+  if (d == None) {
+    return;
+  }
+
+  state->dirty = 1;
+
+  if (d == CW) {
+    if (state->dsp_selected) {
+      switch (state->dsp_row) {
+        case 0: // Mode
+          state_next_mode(state);
+          break;
+        case 1:
+          state_inc_speed(state);
+          break;
+        case 2: // Only happens in cruise
+          state_inc_idle(state);
+          break;
+      }
+    } else {
+      state_next_row(state);
+    }
     return;
   }
   
-  digitalWrite(RELAY, HIGH);
-
-  mouse.get_data();
-  int x = mouse.x_movement();
-  int y = mouse.y_movement();
-
-  float dots = sqrt(sq(abs(x)) + sq(abs(y)));
-  // float pot = calculate_pot(dots);
-  float pot = calculate_log(dots);
-  
-  pot_settings[readIndex] = pot;
-  dot_readings[readIndex] = dots;
-
-  readIndex = (readIndex + 1) % NUM_READINGS;
-
-  float dot_total = 0.0;
-  for (int i = 0; i < NUM_READINGS; i++) {
-    dot_total += dot_readings[i];
-  }
-  float dot_avg = dot_total / NUM_READINGS;
-
-  float pot_total = 0.0;
-  for (int i = 0; i < NUM_READINGS; i++) {
-    pot_total += pot_settings[i];
-  }
-  float pot_avg = pot_total / NUM_READINGS;
-  
-  if (dot_avg > 0.0) {
-    if (pot > 127.0) {
-     tone(BUZZER, 523, 250);
-      Serial.println("OVER SPEED");
+  if (state->dsp_selected) {
+    switch (state->dsp_row) {
+      case 0: // Mode
+        state_prev_mode(state);
+        break;
+      case 1:
+        state_dec_speed(state);
+        break;
+      case 2: // Only happens in cruise
+        state_dec_idle(state);
+        break;
     }
-    // pot = constrain(pot, WIPER_IDLE, 127);
-    pot = bucket(pot);
-    Serial.println(pot);
-    Potentiometer.writeWiper(pot);
   } else {
-    Potentiometer.writeWiper(WIPER_IDLE);
+    state_prev_row(state);
   }
-
-  // Faster polling means higher resolution in movement detection.
-  // The mouse reports a number -127, 127 that it has moved since the last time it was polled. 
-  // If it's polled too slowly it will start reporting 127s for even slow movements.
-  delay(10);
 }
 
-float calculate_pot(float dots) {
-  // Target stitch speed: 11 stitches/sec
-  // Juki TL max speed: 1500 stitches/min
-  // Sensor resolution: 1600 dpi
-  // Polling rate: 10ms
-  float distance = dots / SENSOR_DPI;
-  float speed = distance * 100.0;  // How much we're moving per second with a polling rate of 10ms
-  float stitches_needed = speed * 11.0;
-  float percentage = stitches_needed / STITCHES_MAX;
-  // pot range 100 - 127, which is really 0 - 27 + 100
-  // TODO this is too linear, we need to ramp up quickly and ramp down slowly
-
-  return (percentage * 27) + 100.0;
+void stop() {
+  Potentiometer.writeWiper(WIPER_IDLE);
+  digitalWrite(IDLE_CTRL, LOW);
+  state->running = false;
 }
 
-float calculate_log(float dots) {
-  // Ramp up and down instead of linear, seems smoother.
-  // 40 works when the machine is limited to ~50%, but I'd rather have the machine at 100%.
-  return 100.0 + (27 * ((log(dots + 1) / log(40))));
+void start(int speed) {
+  Potentiometer.writeWiper(speed);
+  digitalWrite(IDLE_CTRL, HIGH);
+  state->running = true;
 }
 
-float bucket(float speed) {
-  // Put the speed into one of 4 buckets so it's not shifting all over the place
-  // This seems to make it smoother, but is maybe less adjustable?
-  float bucket_width = (127 - WIPER_IDLE) / 5;
-  int multiplier;
-
-  if (speed < (WIPER_IDLE + bucket_width)) {
-    multiplier = 1;
-  } else if (speed < (WIPER_IDLE + (bucket_width * 2))) {
-    multiplier = 2;
-  } else if (speed < (WIPER_IDLE + (bucket_width * 3))) {
-    multiplier = 3;
-  } else {
-    multiplier = 4;
+int mode_box_width(enum Mode m) {
+  switch (m) {
+    case MANUAL:
+      return 74;
+    case CRUISE:
+      return 76;
+    case PRECISE:
+      return 88;
+    case BASTE:
+      return 65;
   }
-  return WIPER_IDLE + (bucket_width * multiplier);
+  return 0;
 }
