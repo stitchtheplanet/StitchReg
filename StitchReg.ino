@@ -30,15 +30,15 @@
 #define ENC_CLK 2
 #define ENC_DT 3
 
-#define MOUSE_CLK 6
-#define MOUSE_DATA 7
+#define MOUSE_CLK 7
+#define MOUSE_DATA 8
 
-#define BTN_RUN 8
-#define BTN_CUT 9
-#define BTN_ENC 12
+#define BTN_RUN 5
+#define BTN_CUT 6
+#define BTN_ENC 4
 
 #define POT_CS 10
-#define IDLE_CTRL 14
+#define IDLE_CTRL 9
 
 #define WIPER_IDLE 89
 #define THREAD_CUT 76

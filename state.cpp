@@ -10,7 +10,7 @@ int clamp(int value, int inc, int min, int max);
 
 State *state_new() {
   State *s = (State*)malloc(sizeof(State));
-  s->mode = PRECISE;
+  s->mode = CRUISE;
   s->manual_speed = 50;
   s->cruise_speed = 11;
   s->cruise_idle = 5;
@@ -19,7 +19,7 @@ State *state_new() {
   s->running = 0;
   s->dsp_row = 0;
   s->dsp_selected = 0;
-  s->dsp_rows = 1;
+  s->dsp_rows = 2;
   s->dirty = 0;
   return s;
 }
