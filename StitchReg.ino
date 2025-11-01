@@ -3,7 +3,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#include "PS2MouseHandler.h"
+#include "mouse.h"
 #include "state.h"
 #include "button.h"
 #include "encoder.h"
@@ -53,7 +53,7 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 MCP4131 Potentiometer(POT_CS);
-PS2MouseHandler mouse(MOUSE_CLK, MOUSE_DATA, PS2_MOUSE_REMOTE);
+mouse *m = mouse_new(MOUSE_CLK, MOUSE_DATA);
 
 Button *runButton = button_new(BTN_RUN);
 Button *encButton = button_new(BTN_ENC);
@@ -70,9 +70,7 @@ int readIndex = 0;
 
 State *state = state_new();
 
-void setup() {
-  Serial.begin(9600);
-  
+void setup() {  
   // initialize the display
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setTextSize(2);
@@ -86,9 +84,7 @@ void setup() {
   // Initialize the potentiometer to 40k
   Potentiometer.writeWiper(WIPER_IDLE);
  
-  int m = mouse.initialise();
-  mouse.enable_data_reporting();
-  mouse.set_remote_mode();
+  mouse_begin(m);
 
   // set up the encoder
   attachInterrupt(digitalPinToInterrupt(encoder->clk_pin), updateEncoder, CHANGE);
@@ -120,9 +116,9 @@ void loop() {
     // Figure out the speed value for the target stitches per inch
     // if (lastPoll > 100) {
       // Poll rate of 10ms
-      mouse.get_data();
-      int x = mouse.x_movement();
-      int y = mouse.y_movement();
+      mouse_update(m);
+      int x = m->x;
+      int y = m->y;
       float dots = (sqrt(sq(abs(x)) + sq(abs(y))) * 100.0) / SENSOR_DPI;
       // float dotsMoved = sqrt(sq(abs(x)) + sq(abs(y)));
       dot_readings[readIndex] = dots;
