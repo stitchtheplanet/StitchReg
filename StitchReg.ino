@@ -121,7 +121,7 @@ void loop() {
       int y = m->y;
       double distance = (sqrt(sq(abs(x)) + sq(abs(y)))) / SENSOR_DPI; // Distance moved, in inches
       double speed = (distance / m->t) * 1000; // Speed in inches per seconds
-      double stitches = speed * current_speed(state); // Stitches needed to hit target SPI
+      double stitches = speed * speed_target(state); // Stitches needed to hit target SPI
       double percent = stitches / 25;
 
       // Smooth out the last NUM_READINGS percentages
@@ -338,7 +338,6 @@ void start(int speed) {
   Potentiometer.writeWiper(speed);
   digitalWrite(IDLE_CTRL, HIGH);
   state->running = true;
-  xd = 0;
 }
 
 int mode_box_width(enum Mode m) {

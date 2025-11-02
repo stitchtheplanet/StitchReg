@@ -32,7 +32,7 @@ typedef struct {
 
 State *state_new();
 
-int current_speed(State *s);
+int speed_target(State *s);
 void state_next_mode(State *s);
 void state_prev_mode(State *s);
 void state_inc_speed(State *s);

@@ -24,7 +24,7 @@ State *state_new() {
   return s;
 }
 
-int current_speed(State *s) {
+int speed_target(State *s) {
   switch (s->mode) {
     case CRUISE:
       return s->cruise_speed;
