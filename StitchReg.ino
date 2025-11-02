@@ -42,7 +42,7 @@
 
 #define WIPER_IDLE 89
 #define THREAD_CUT 76
-#define SENSOR_DPI 1600.0
+#define SENSOR_DPI 2032.0 // Empirically measured, data sheet says 1600
 #define STITCHES_MAX 25.0 // 1500 stitches/min = 25 stitches/sec
 
 #define DEBOUNCE 5
@@ -53,24 +53,28 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 MCP4131 Potentiometer(POT_CS);
-mouse *m = mouse_new(MOUSE_CLK, MOUSE_DATA);
+mouse *m;
+State *state;
 
 Button *runButton = button_new(BTN_RUN);
 Button *encButton = button_new(BTN_ENC);
 Button *cutButton = button_new(BTN_CUT);
 
-Encoder *encoder = encoder_new(ENC_CLK, ENC_DT);
+Encoder *encoder;
 
 const int cw = SSD1306_WHITE;
 const int cb = SSD1306_BLACK;
 
 const int NUM_READINGS = 25;
-float dot_readings[NUM_READINGS];
+double smoother[NUM_READINGS];
 int readIndex = 0;
 
-State *state = state_new();
 
 void setup() {  
+  Serial.begin(9600);
+
+  state = state_new();
+
   // initialize the display
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setTextSize(2);
@@ -84,9 +88,11 @@ void setup() {
   // Initialize the potentiometer to 40k
   Potentiometer.writeWiper(WIPER_IDLE);
  
+  m = mouse_new(MOUSE_CLK, MOUSE_DATA);
   mouse_begin(m);
 
   // set up the encoder
+  encoder = encoder_new(ENC_CLK, ENC_DT);
   attachInterrupt(digitalPinToInterrupt(encoder->clk_pin), updateEncoder, CHANGE);
   setDisplay();
 }
@@ -108,33 +114,31 @@ void loop() {
   }
 
   if (state->running) {
-    // Stitch Per Inch based calculations
-    // Calculate how many dots we've moved since the last poll
-    // Get millis since last poll
-    // That gives us a movement in inches
-    // Figure out if we're idle and set to idle speed or off
-    // Figure out the speed value for the target stitches per inch
-    // if (lastPoll > 100) {
+    // if (lastPoll > 10) {
       // Poll rate of 10ms
       mouse_update(m);
       int x = m->x;
       int y = m->y;
-      float dots = (sqrt(sq(abs(x)) + sq(abs(y))) * 100.0) / SENSOR_DPI;
-      // float dotsMoved = sqrt(sq(abs(x)) + sq(abs(y)));
-      dot_readings[readIndex] = dots;
+      double distance = (sqrt(sq(abs(x)) + sq(abs(y)))) / SENSOR_DPI; // Distance moved, in inches
+      double speed = (distance / m->t) * 1000; // Speed in inches per seconds
+      double stitches = speed * current_speed(state); // Stitches needed to hit target SPI
+      double percent = stitches / 25;
+
+      // Smooth out the last NUM_READINGS percentages
+      smoother[readIndex] = percent;
       readIndex = (readIndex + 1) % NUM_READINGS;
       
-      float dot_total = 0.0;
+      double percent_total = 0.0;
       for (int i = 0; i < NUM_READINGS; i++) {
-        dot_total += dot_readings[i];
+        percent_total += smoother[i];
       }
-      float dot_avg = dot_total / NUM_READINGS;
-      float percent = ((current_speed(state) * dot_avg) / 25.0);
-      if (percent > 1.0)
-        percent = 1.0;
+      double percent_avg = percent_total / NUM_READINGS;
+      if (percent_avg > 1.0)
+        percent_avg = 1.0;
 
-      if (dots > 0.0) {
-        float pot = (percent * 23) + 105.0;
+      if (distance > 0.0) {
+        // 23 and 105 are magic numbers here, they can be tweaked
+        double pot = (percent_avg * 23) + 105.0;
         // lastPoll = 0;
 
         if (state->mode == PRECISE) {
@@ -334,6 +338,7 @@ void start(int speed) {
   Potentiometer.writeWiper(speed);
   digitalWrite(IDLE_CTRL, HIGH);
   state->running = true;
+  xd = 0;
 }
 
 int mode_box_width(enum Mode m) {
