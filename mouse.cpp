@@ -31,12 +31,10 @@ void mouse_begin(mouse *m) {
   // Disable data reporting
   send(m, 0xF4);
   b = read(m); // ACK
-  Serial.println(b, HEX);
 
   // We want remote mode
   send(m, 0xF0);
   b = read(m); // ACK
-  Serial.println(b, HEX);
 
   // Set resolution to 8 counts/mm
   send(m, 0xE8);
@@ -59,6 +57,7 @@ void mouse_begin(mouse *m) {
 }
 
 void mouse_update(mouse *m) {
+  unsigned long start = millis();
   unsigned char b = 0;
   unsigned char ack = 0;
 
@@ -68,6 +67,8 @@ void mouse_update(mouse *m) {
   b = read(m);
   m->x = (0x10 & b) ? 0xFF00 | read(m) : read(m);
   m->y = (0x20 & b) ? 0xFF00 | read(m) : read(m);
+  m->t = start - m->last;
+  m->last = start;
 }
 
 int send(mouse *m, unsigned char data) {
