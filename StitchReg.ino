@@ -69,6 +69,7 @@ const int NUM_READINGS = 25;
 double smoother[NUM_READINGS];
 int readIndex = 0;
 
+unsigned long lastPoll = millis();
 
 void setup() {  
   Serial.begin(9600);
@@ -114,8 +115,11 @@ void loop() {
   }
 
   if (state->running) {
-    // if (lastPoll > 10) {
+    unsigned long since = millis() - lastPoll;
+    if (since > 10) {
       // Poll rate of 10ms
+      lastPoll = millis();
+
       mouse_update(m);
       int x = m->x;
       int y = m->y;
@@ -139,7 +143,6 @@ void loop() {
       if (distance > 0.0) {
         // 23 and 105 are magic numbers here, they can be tweaked
         double pot = (percent_avg * 23) + 105.0;
-        // lastPoll = 0;
 
         if (state->mode == PRECISE) {
           digitalWrite(IDLE_CTRL, HIGH);
@@ -153,9 +156,7 @@ void loop() {
           digitalWrite(IDLE_CTRL, LOW);
         }
       }
-    // }
-
-    delay(10);
+    }
 
     return;
   }  
