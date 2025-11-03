@@ -2,6 +2,15 @@
 #include <Arduino.h>
 #include <stdlib.h>
 
+#define REMOTE_MODE       0xF0
+#define SET_SAMPLE_RATE   0xF3
+#define DISABLE_REPORTING 0xF4
+#define ACK               0xFA
+#define RESET             0xFF
+#define SET_RESOLUTION    0xE8
+#define GET_STATUS        0xE9
+#define READ_DATA         0xEB
+
 int send(Mouse *m, unsigned char data);
 unsigned char read(Mouse *m);
 void pull_low(int pin);
@@ -21,35 +30,33 @@ void mouse_begin(Mouse *m) {
   pull_high(m->clk);
   pull_high(m->data);
  
-  send(m, 0xFF); // reset
+  send(m, RESET);
+
   // The self test takes longer than our normal time out, so wait for that.
   while (digitalRead(m->clk)) {}
   b = read(m); // reset ACK
   b = read(m); // self test results
   b = read(m); // device id
 
-  // Disable data reporting
-  send(m, 0xF4);
+  send(m, DISABLE_REPORTING);
   b = read(m); // ACK
 
-  // We want remote mode
-  send(m, 0xF0);
+  send(m, REMOTE_MODE);
   b = read(m); // ACK
 
   // Set resolution to 8 counts/mm
-  send(m, 0xE8);
+  send(m, SET_RESOLUTION);
   read(m); // ACK
   send(m, 0x03);
   read(m); // ACK
 
   // Set sample rate to 200/s
-  send(m, 0xF3);
+  send(m, SET_SAMPLE_RATE);
   read(m); // ACK
   send(m, 0xC8);
   read(m); // ACK
 
-  // Get Status
-  send(m, 0xE9);
+  send(m, GET_STATUS);
   read(m); // ACK
   read(m); // statuses
   m->resolution = read(m);
@@ -61,7 +68,7 @@ void mouse_update(Mouse *m) {
   unsigned char b = 0;
   unsigned char ack = 0;
 
-  send(m, 0xEB); // read data
+  send(m, READ_DATA); // read data
   ack = read(m); // ACK
 
   b = read(m);
@@ -135,7 +142,7 @@ unsigned char read(Mouse *m) {
     // parity += data & 0x1;
     wait_for(m->clk, HIGH);
   }
-  // validate parity? nah, wgaf
+  // validate parity, skipped
   wait_for(m->clk, LOW);
   wait_for(m->clk, HIGH);
 
