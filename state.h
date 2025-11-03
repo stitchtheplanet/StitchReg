@@ -1,5 +1,4 @@
-#ifndef STATE_H
-#define STATE_H
+#pragma once
 
 #include <stdlib.h>
 
@@ -48,6 +47,3 @@ const char *state_baste(State *s);
 void state_toggle_selected(State *s);
 void state_next_row(State *s);
 void state_prev_row(State *s);
-
-
-#endif

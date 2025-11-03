@@ -10,8 +10,8 @@ typedef struct {
   unsigned char sample;
   unsigned long t;
   unsigned long last;
-} mouse;
+} Mouse;
 
-mouse *mouse_new(int clk, int data);
-void mouse_begin(mouse *m);
-void mouse_update(mouse *m);
+Mouse *mouse_new(int clk, int data);
+void mouse_begin(Mouse *m);
+void mouse_update(Mouse *m);

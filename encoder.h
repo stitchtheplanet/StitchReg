@@ -1,5 +1,4 @@
-#ifndef ENCODER_H
-#define ENCODER_H
+#pragma once
 
 enum EncDirection {
   CW,
@@ -16,5 +15,3 @@ typedef struct {
 
 Encoder *encoder_new(int clk, int data);
 enum EncDirection encoder_update(Encoder *e);
-
-#endif

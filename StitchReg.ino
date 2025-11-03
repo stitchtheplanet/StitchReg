@@ -45,16 +45,14 @@
 #define SENSOR_DPI 2032.0 // Empirically measured, data sheet says 1600
 #define STITCHES_MAX 25.0 // 1500 stitches/min = 25 stitches/sec
 
-#define DEBOUNCE 5
-
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET 4
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-MCP4131 Potentiometer(POT_CS);
-mouse *m;
-State *state;
+MCP4131 potentiometer(POT_CS);
+Mouse *m;
+volatile State *state;
 
 Button *runButton = button_new(BTN_RUN);
 Button *encButton = button_new(BTN_ENC);
@@ -67,9 +65,9 @@ const int cb = SSD1306_BLACK;
 
 const int NUM_READINGS = 25;
 double smoother[NUM_READINGS];
-int readIndex = 0;
+int read_idx = 0;
 
-unsigned long lastPoll = millis();
+unsigned long last_poll = millis();
 
 void setup() {  
   Serial.begin(9600);
@@ -80,14 +78,14 @@ void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setTextSize(2);
   display.setTextColor(cw);
-  setDisplay();
+  set_display();
 
   // The transistor that engages the idle resistor
   pinMode(IDLE_CTRL, OUTPUT);
   digitalWrite(IDLE_CTRL, LOW);
 
   // Initialize the potentiometer to 40k
-  Potentiometer.writeWiper(WIPER_IDLE);
+  potentiometer.writeWiper(WIPER_IDLE);
  
   m = mouse_new(MOUSE_CLK, MOUSE_DATA);
   mouse_begin(m);
@@ -95,7 +93,7 @@ void setup() {
   // set up the encoder
   encoder = encoder_new(ENC_CLK, ENC_DT);
   attachInterrupt(digitalPinToInterrupt(encoder->clk_pin), updateEncoder, CHANGE);
-  setDisplay();
+  set_display();
 }
 
 void loop() {
@@ -105,7 +103,7 @@ void loop() {
   
   if (state->running && runButton->pressed) {
     stop();
-    setDisplay();
+    set_display();
     return;
   }
 
@@ -115,10 +113,10 @@ void loop() {
   }
 
   if (state->running) {
-    unsigned long since = millis() - lastPoll;
+    unsigned long since = millis() - last_poll;
     if (since > 10) {
       // Poll rate of 10ms
-      lastPoll = millis();
+      last_poll = millis();
 
       mouse_update(m);
       int x = m->x;
@@ -126,11 +124,11 @@ void loop() {
       double distance = (sqrt(sq(abs(x)) + sq(abs(y)))) / SENSOR_DPI; // Distance moved, in inches
       double speed = (distance / m->t) * 1000; // Speed in inches per seconds
       double stitches = speed * speed_target(state); // Stitches needed to hit target SPI
-      double percent = stitches / 25;
+      double percent = stitches / STITCHES_MAX;
 
       // Smooth out the last NUM_READINGS percentages
-      smoother[readIndex] = percent;
-      readIndex = (readIndex + 1) % NUM_READINGS;
+      smoother[read_idx] = percent;
+      read_idx = (read_idx + 1) % NUM_READINGS;
       
       double percent_total = 0.0;
       for (int i = 0; i < NUM_READINGS; i++) {
@@ -148,11 +146,11 @@ void loop() {
           digitalWrite(IDLE_CTRL, HIGH);
         }
 
-        Potentiometer.writeWiper(pot);
+        potentiometer.writeWiper(pot);
       } else {
-        Potentiometer.writeWiper((state->cruise_idle / 100.0) * 23.0 + 105);
+        potentiometer.writeWiper((state->cruise_idle / 100.0) * 23.0 + 105);
         if (state->mode == PRECISE) {
-          Potentiometer.writeWiper(WIPER_IDLE);
+          potentiometer.writeWiper(WIPER_IDLE);
           digitalWrite(IDLE_CTRL, LOW);
         }
       }
@@ -167,15 +165,15 @@ void loop() {
     // rather than writing to the pot every loop.
     switch (state->mode) {
       case MANUAL:
-        Potentiometer.writeWiper((state->manual_speed / 100.0) * 23.0 + 105);
+        potentiometer.writeWiper((state->manual_speed / 100.0) * 23.0 + 105);
         break;
       case BASTE:
-        Potentiometer.writeWiper(state_baste_wiper(state));
+        potentiometer.writeWiper(state_baste_wiper(state));
         break;
       default:
         break;
     }
-    setDisplay();
+    set_display();
     return;
   }
 
@@ -189,16 +187,16 @@ void loop() {
 dbuttons:
   if (encButton->pressed) {
     state_toggle_selected(state);
-    setDisplay();
+    set_display();
   }
 
   if (state->dirty) {
     state->dirty = 0;
-    setDisplay();
+    set_display();
   }
 }
 
-void setDisplay() {
+void set_display() {
   // Row 0, mode row
   display.clearDisplay();
 
@@ -330,13 +328,13 @@ void updateEncoder() {
 }
 
 void stop() {
-  Potentiometer.writeWiper(WIPER_IDLE);
+  potentiometer.writeWiper(WIPER_IDLE);
   digitalWrite(IDLE_CTRL, LOW);
   state->running = false;
 }
 
 void start(int speed) {
-  Potentiometer.writeWiper(speed);
+  potentiometer.writeWiper(speed);
   digitalWrite(IDLE_CTRL, HIGH);
   state->running = true;
 }

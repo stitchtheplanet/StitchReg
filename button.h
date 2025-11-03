@@ -1,5 +1,4 @@
-#ifndef BUTTON_H
-#define BUTTON_H
+#pragma once
 
 // Some simple stuff to debounce the buttons
 
@@ -16,5 +15,3 @@ typedef struct {
 
 Button *button_new(int pin);
 void button_update(Button *b);
-
-#endif

@@ -2,20 +2,20 @@
 #include <Arduino.h>
 #include <stdlib.h>
 
-int send(mouse *m, unsigned char data);
-unsigned char read(mouse *m);
+int send(Mouse *m, unsigned char data);
+unsigned char read(Mouse *m);
 void pull_low(int pin);
 void pull_high(int pin);
 int wait_for(int pin, int state);
 
-mouse *mouse_new(int clk, int data) {
-  mouse *m = (mouse*)malloc(sizeof(mouse));
+Mouse *mouse_new(int clk, int data) {
+  Mouse *m = (Mouse*)malloc(sizeof(Mouse));
   m->clk = clk;
   m->data = data;
   return m;
 }
 
-void mouse_begin(mouse *m) {
+void mouse_begin(Mouse *m) {
   unsigned char b;
   // idle
   pull_high(m->clk);
@@ -56,7 +56,7 @@ void mouse_begin(mouse *m) {
   m->sample = read(m);
 }
 
-void mouse_update(mouse *m) {
+void mouse_update(Mouse *m) {
   unsigned long start = millis();
   unsigned char b = 0;
   unsigned char ack = 0;
@@ -71,7 +71,7 @@ void mouse_update(mouse *m) {
   m->last = start;
 }
 
-int send(mouse *m, unsigned char data) {
+int send(Mouse *m, unsigned char data) {
   unsigned char parity = 1;
 
   pull_high(m->data);
@@ -116,7 +116,7 @@ int send(mouse *m, unsigned char data) {
   return 0;
 }
 
-unsigned char read(mouse *m) {
+unsigned char read(Mouse *m) {
   unsigned char data = 0;
   unsigned char parity;
 
