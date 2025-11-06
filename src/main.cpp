@@ -75,8 +75,6 @@ int read_idx = 0;
 unsigned long last_poll = millis();
 
 void setup() {  
-  Serial.begin(9600);
-
   state = state_new();
 
   // initialize the display
