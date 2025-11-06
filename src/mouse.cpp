@@ -21,6 +21,12 @@ Mouse *mouse_new(int clk, int data) {
   Mouse *m = (Mouse*)malloc(sizeof(Mouse));
   m->clk = clk;
   m->data = data;
+  m->x = 0;
+  m->y = 0;
+  m->resolution = 0;
+  m->sample = 0;
+  m->t = 0;
+  m->last = 0;
   return m;
 }
 
