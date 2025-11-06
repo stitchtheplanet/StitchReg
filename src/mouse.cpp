@@ -25,7 +25,6 @@ Mouse *mouse_new(int clk, int data) {
 }
 
 void mouse_begin(Mouse *m) {
-  unsigned char b;
   // idle
   pull_high(m->clk);
   pull_high(m->data);
@@ -34,15 +33,15 @@ void mouse_begin(Mouse *m) {
 
   // The self test takes longer than our normal time out, so wait for that.
   while (digitalRead(m->clk)) {}
-  b = read(m); // reset ACK
-  b = read(m); // self test results
-  b = read(m); // device id
+  read(m); // reset ACK
+  read(m); // self test results
+  read(m); // device id
 
   send(m, DISABLE_REPORTING);
-  b = read(m); // ACK
+  read(m); // ACK
 
   send(m, REMOTE_MODE);
-  b = read(m); // ACK
+  read(m); // ACK
 
   // Set resolution to 8 counts/mm
   send(m, SET_RESOLUTION);
@@ -66,10 +65,9 @@ void mouse_begin(Mouse *m) {
 void mouse_update(Mouse *m) {
   unsigned long start = millis();
   unsigned char b = 0;
-  unsigned char ack = 0;
 
   send(m, READ_DATA); // read data
-  ack = read(m); // ACK
+  read(m); // ACK
 
   b = read(m);
   m->x = (0x10 & b) ? 0xFF00 | read(m) : read(m);
@@ -125,7 +123,7 @@ int send(Mouse *m, unsigned char data) {
 
 unsigned char read(Mouse *m) {
   unsigned char data = 0;
-  unsigned char parity;
+  // unsigned char parity;
 
   wait_for(m->clk, LOW);
   wait_for(m->clk, HIGH);

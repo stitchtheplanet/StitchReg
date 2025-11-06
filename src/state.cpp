@@ -25,12 +25,19 @@ State *state_new() {
 }
 
 int speed_target(State *s) {
+  int speed = 0;
   switch (s->mode) {
     case CRUISE:
-      return s->cruise_speed;
+      speed = s->cruise_speed;
+      break;
     case PRECISE:
-      return s->precise_speed;
+      speed = s->precise_speed;
+      break;
+    case MANUAL:
+    case BASTE:
+      break;
   }
+  return speed;
 }
 
 void state_next_mode(State *s) {
@@ -86,40 +93,56 @@ void state_dec_idle(State *s) {
 }
 
 int state_baste_wiper(State *s) {
+  int wiper = 0;
   switch (s->baste_speed) {
     case SMALL:
-      return 107;
+      wiper = 107;
+      break;
     case MEDIUM:
-      return 106;
+      wiper = 106;
+      break;
     case LARGE:
-      return 105;
+      wiper = 105;
   }
+  return wiper;
 }
 
 enum Mode next_mode(enum Mode m) {
+  enum Mode mode;
   switch (m) {
     case MANUAL:
-      return CRUISE;
+      mode = CRUISE;
+      break;
     case CRUISE:
-      return PRECISE;
+      mode = PRECISE;
+      break;
     case PRECISE:
-      return BASTE;
+      mode = BASTE;
+      break;
     case BASTE:
-      return MANUAL;
+      mode = MANUAL;
+      break;
   }
+  return mode;
 }
 
 enum Mode prev_mode(enum Mode m) {
+  enum Mode mode;
   switch (m) {
     case BASTE:
-      return PRECISE;
+      mode = PRECISE;
+      break;
     case PRECISE:
-      return CRUISE;
+      mode = CRUISE;
+      break;
     case CRUISE:
-      return MANUAL;
+      mode = MANUAL;
+      break;
     case MANUAL:
-      return BASTE;
+      mode = BASTE;
+      break;
   }
+  return mode;
 }
 
 const char *state_mode(State *s) {
@@ -133,6 +156,7 @@ const char *state_mode(State *s) {
     case BASTE:
       return "Baste";
   }
+  return "";
 }
 
 void state_toggle_selected(State *s) {
@@ -154,25 +178,35 @@ void state_prev_row(State *s) {
 }
 
 enum Baste next_baste(enum Baste b) {
+  enum Baste next;
   switch (b) {
     case SMALL:
-      return MEDIUM;
+      next = MEDIUM;
+      break;
     case MEDIUM:
-      return LARGE;
+      next = LARGE;
+      break;
     case LARGE:
-      return SMALL;
+      next = SMALL;
+      break;
   }
+  return next;
 }
 
 enum Baste prev_baste(enum Baste b) {
+  enum Baste prev;
     switch(b) {
       case SMALL:
-        return LARGE;
+        prev = LARGE;
+        break;
       case MEDIUM:
-        return SMALL;
+        prev = SMALL;
+        break;
       case LARGE:
-        return MEDIUM;
+        prev = MEDIUM;
+        break;
     }
+    return prev;
 }
 
 const char *state_baste(State *s) {
@@ -184,6 +218,7 @@ const char *state_baste(State *s) {
     case LARGE:
       return "LARGE";
   }
+  return "";
 }
 
 int clamp(int value, int inc, int min, int max) {

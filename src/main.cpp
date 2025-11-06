@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <MCP4131.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -7,6 +8,12 @@
 #include "state.h"
 #include "button.h"
 #include "encoder.h"
+
+void set_display();
+void updateEncoder(int d);
+int mode_box_width(enum Mode m);
+void stop();
+void start(int speed);
 
 // Juki TL Pedal resistances
 // Without pressing the pedal it sits at 140k ohms and the machine needs to see
@@ -52,13 +59,11 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 MCP4131 potentiometer(POT_CS);
 Mouse *m;
-volatile State *state;
+State *state;
 
 Button *runButton = button_new(BTN_RUN);
 Button *encButton = button_new(BTN_ENC);
 Button *cutButton = button_new(BTN_CUT);
-
-Encoder *encoder;
 
 const int cw = SSD1306_WHITE;
 const int cb = SSD1306_BLACK;
@@ -91,12 +96,14 @@ void setup() {
   mouse_begin(m);
 
   // set up the encoder
-  encoder = encoder_new(ENC_CLK, ENC_DT);
-  attachInterrupt(digitalPinToInterrupt(encoder->clk_pin), updateEncoder, CHANGE);
+  encoder_begin();
   set_display();
 }
 
 void loop() {
+  int c = encoder_count();
+  updateEncoder(c);
+
   button_update(encButton);
   button_update(runButton);
   button_update(cutButton);
@@ -184,7 +191,6 @@ void loop() {
     stop();
   }
 
-dbuttons:
   if (encButton->pressed) {
     state_toggle_selected(state);
     set_display();
@@ -283,15 +289,14 @@ void set_display() {
   display.display();
 }
 
-void updateEncoder() {
-  EncDirection d = encoder_update(encoder);
-  if (d == None) {
+void updateEncoder(int d) {
+  if (d == 0) {
     return;
   }
 
   state->dirty = 1;
 
-  if (d == CW) {
+  if (d > 0) {
     if (state->dsp_selected) {
       switch (state->dsp_row) {
         case 0: // Mode
